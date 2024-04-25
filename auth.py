@@ -1,3 +1,6 @@
+import streamlit as st
+import hashlib
+import sqlite3
 
 # Вспомогательная функция для хеширования паролей
 def hash_password(password):
