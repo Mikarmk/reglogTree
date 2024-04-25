@@ -1,58 +1,77 @@
 import streamlit as st
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import sqlite3
+import hashlib
 
-# Подключение к Google Sheets API
-scope = ['https://spreadsheets.google.com/feeds',
-         'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('your-credentials.json', scope)
-client = gspread.authorize(creds)
-sheet = client.open('your-google-sheet').sheet1
+# Вспомогательная функция для хеширования паролей
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# Регистрация пользователя
-def register_user(username, password):
-    existing_users = sheet.col_values(1)
-    if username in existing_users:
-        return "Пользователь с таким именем уже существует"
-    else:
-        sheet.append_row([username, password])
-        return "Регистрация прошла успешно"
+# Создание базы данных
+def create_database():
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (username TEXT UNIQUE, password TEXT)''')
+    conn.commit()
+    conn.close()
 
-# Авторизация пользователя
-def login_user(username, password):
-    user_data = sheet.find(username)
-    if user_data:
-        stored_password = sheet.cell(user_data.row, 2).value
-        if password == stored_password:
-            return "Авторизация успешна"
+create_database()
+
+# Функция для добавления пользователя в базу данных
+def add_user(username, hashed_password):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
+    conn.commit()
+    conn.close()
+
+# Функция для проверки аутентификации пользователя
+def check_credentials(username, hashed_password):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, hashed_password))
+    result = c.fetchone()
+    conn.close()
+    return result is not None
+
+# Функция для отображения формы входа
+def login():
+    st.sidebar.subheader('Вход')
+    username = st.sidebar.text_input('Имя пользователя')
+    password = st.sidebar.text_input('Пароль', type='password')
+    if st.sidebar.button('Войти'):
+        hashed_password = hash_password(password)
+        if check_credentials(username, hashed_password):
+            st.session_state['username'] = username
+            st.sidebar.success('Успешный вход!')
         else:
-            return "Неверный пароль"
-    else:
-        return "Пользователь не найден"
+            st.sidebar.error('Неверное имя пользователя или пароль.')
 
-# Сохранение сообщений пользователя
-def save_message(username, message):
-    messages_sheet = client.open('your-google-sheet').get_worksheet(1)
-    messages = messages_sheet.col_values(1)
-    if len(messages) >= 10:
-        messages_sheet.delete_row(1)
-    messages_sheet.append_row([message])
+# Функция для отображения формы регистрации
+def registration():
+    st.sidebar.subheader('Регистрация')
+    new_username = st.sidebar.text_input('Новое имя пользователя')
+    new_password = st.sidebar.text_input('Новый пароль', type='password')
+    if st.sidebar.button('Зарегистрироваться'):
+        if new_username and new_password:
+            hashed_password = hash_password(new_password)
+            try:
+                add_user(new_username, hashed_password)
+                st.sidebar.success('Регистрация прошла успешно!')
+            except sqlite3.IntegrityError:
+                st.sidebar.error('Такое имя пользователя уже существует.')
+        else:
+            st.sidebar.error('Имя пользователя и пароль не могут быть пустыми.')
 
-# Интерфейс Streamlit
-st.title('Регистрация и авторизация')
+# Функция для отображения основной платформы
+def main_platform():
+    st.title('Добро пожаловать в приложение!')
+    # Здесь будет функционал основной платформы (чат, загрузка файлов, поиск литературы)
+    # Помести сюда логику для инструментов, как ты описал в функционале после регистрации
 
-action = st.selectbox('Выберите действие', ['Регистрация', 'Авторизация'])
-
-if action == 'Регистрация':
-    username = st.text_input('Имя пользователя')
-    password = st.text_input('Пароль', type='password')
-    if st.button('Зарегистрироваться'):
-        result = register_user(username, password)
-        st.write(result)
-
-if action == 'Авторизация':
-    username = st.text_input('Имя пользователя')
-    password = st.text_input('Пароль', type='password')
-    if st.button('Войти'):
-        result = login_user(username, password)
-        st.write(result)
+# Проверка аутентификации пользователя
+if 'username' not in st.session_state:
+    registration()
+    login()
+else:
+    main_platform()
