@@ -1,6 +1,3 @@
-import streamlit as st
-import sqlite3
-import hashlib
 
 # Вспомогательная функция для хеширования паролей
 def hash_password(password):
@@ -14,8 +11,6 @@ def create_database():
                  (username TEXT UNIQUE, password TEXT)''')
     conn.commit()
     conn.close()
-
-create_database()
 
 # Функция для добавления пользователя в базу данных
 def add_user(username, hashed_password):
@@ -34,44 +29,40 @@ def check_credentials(username, hashed_password):
     conn.close()
     return result is not None
 
-# Функция для отображения формы входа
-def login():
-    st.sidebar.subheader('Вход')
-    username = st.sidebar.text_input('Имя пользователя')
-    password = st.sidebar.text_input('Пароль', type='password')
-    if st.sidebar.button('Войти'):
-        hashed_password = hash_password(password)
-        if check_credentials(username, hashed_password):
-            st.session_state['username'] = username
-            st.sidebar.success('Успешный вход!')
+# Формы регистрации и входа
+def auth_forms():
+    create_database()  # убедитесь, что база данных создается
+    with st.sidebar:
+        if 'username' not in st.session_state:
+            # Формы регистрации и входа
+            st.subheader('Регистрация')
+            new_username = st.text_input('Новое имя пользователя')
+            new_password = st.text_input('Новый пароль', type='password')
+            if st.button('Зарегистрироваться'):
+                if new_username and new_password:
+                    hashed_password = hash_password(new_password)
+                    try:
+                        add_user(new_username, hashed_password)
+                        st.success('Регистрация прошла успешно!')
+                    except sqlite3.IntegrityError:
+                        st.error('Такое имя пользователя уже существует.')
+                else:
+                    st.error('Имя пользователя и пароль не могут быть пустыми.')
+
+            st.subheader('Вход')
+            username = st.text_input('Имя пользователя', key='login_user')
+            password = st.text_input('Пароль', type='password', key='login_pass')
+            if st.button('Войти'):
+                hashed_password = hash_password(password)
+                if check_credentials(username, hashed_password):
+                    st.session_state['username'] = username
+                    st.success('Успешный вход!')
+                else:
+                    st.error('Неверное имя пользователя или пароль.')
+            return False  # пользователь не прошел аутентификацию
         else:
-            st.sidebar.error('Неверное имя пользователя или пароль.')
-
-# Функция для отображения формы регистрации
-def registration():
-    st.sidebar.subheader('Регистрация')
-    new_username = st.sidebar.text_input('Новое имя пользователя')
-    new_password = st.sidebar.text_input('Новый пароль', type='password')
-    if st.sidebar.button('Зарегистрироваться'):
-        if new_username and new_password:
-            hashed_password = hash_password(new_password)
-            try:
-                add_user(new_username, hashed_password)
-                st.sidebar.success('Регистрация прошла успешно!')
-            except sqlite3.IntegrityError:
-                st.sidebar.error('Такое имя пользователя уже существует.')
-        else:
-            st.sidebar.error('Имя пользователя и пароль не могут быть пустыми.')
-
-# Функция для отображения основной платформы
-def main_platform():
-    st.title('Добро пожаловать в приложение!')
-    # Здесь будет функционал основной платформы (чат, загрузка файлов, поиск литературы)
-    # Помести сюда логику для инструментов, как ты описал в функционале после регистрации
-
-# Проверка аутентификации пользователя
-if 'username' not in st.session_state:
-    registration()
-    login()
-else:
-    main_platform()
+            # пользователь вошел в систему
+            st.write(f'Добро пожаловать, {st.session_state.username}!')
+            if st.button('Выйти'):
+                del st.session_state['username']
+            return True  # пользователь прошел аутентификацию
